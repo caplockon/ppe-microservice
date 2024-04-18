@@ -1,0 +1,73 @@
+version: '3.9'
+services:
+  ppe-db:
+    image: postgres
+    restart: unless-stopped
+    tty: true
+    container_name: ppe-db
+    ports:
+      - ${DB_HOST_PORT:-5432}:5432
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-ppe_microservice}
+      POSTGRES_USER: ${DB_USERNAME:-ppe_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ppe_password}
+      SERVICE_NAME: ppe-db
+      SERVICE_TAGS: dev
+    env_file:
+      - .env
+    volumes:
+      - ppe-db:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test:
+        - CMD
+        - pg_isready
+        - '-q'
+        - '-d'
+        - '${DB_DATABASE}'
+        - '-U'
+        - '${DB_USERNAME}'
+      retries: 3
+      timeout: 5s
+
+  ppe-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        XDE: 1
+    image: ppe-app
+    container_name: ppe-app
+    restart: unless-stopped
+    tty: true
+    environment:
+      SERVICE_NAME: ppe-app
+      SERVICE_TAGS: dev
+      WORKER_DAEMON: false
+      XDEBUG_CONFIG: "client_host=host.docker.internal discover_client_host=1 start_with_request=yes idekey=PHPSTORM"
+      XDEBUG_MODE: debug
+      XDEBUG_SESSION: 1
+      PHP_IDE_CONFIG: ${PHP_IDE_CONFIG:-}
+    env_file:
+      - .env
+    ports:
+      - ${WEB_HOST_PORT_SSL:-433}:443
+      - ${WEB_HOST_PORT:-80}:80
+    volumes:
+      - /var/www/html/vendor
+      - .:/var/www/html:cached
+      - ./.docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    networks:
+      - app-network
+    depends_on:
+      - ppe-db
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+    ppe-db:
+        driver: local
+
